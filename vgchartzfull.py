@@ -6,6 +6,9 @@ import numpy as np
 import signal
 from tqdm import tqdm
 
+class LimitReachedException(Exception):
+    pass
+
 def exit_handler(sig, frame):
     raise KeyboardInterrupt
 
@@ -18,20 +21,20 @@ def main():
     urltail += '&showlastupdate=0&showothersales=1&showgenre=1&showshipped=0&showshipped=1&sort=GL'
 
     csv_path = os.environ.get("CSV_PATH", os.getcwd())
+    limit = int(os.environ.get("LIMIT", 0))
+
+    max_retries = 20
 
     results = []
     rec_count = 0
     page = 1
-    print("start")
     signal.signal(signal.SIGINT, exit_handler)
     signal.signal(signal.SIGTERM, exit_handler)
     try:
-        with tqdm(total=1, desc="scraping", unit="game") as myprogressbar:
+        with tqdm(total=1, unit="games") as myprogressbar:
             while True:
-                
                 error_count = 0
                 try:
-                    
                     surl = urlhead + str(page) + urltail
 
                     r = requests.get(surl).text
@@ -57,16 +60,22 @@ def main():
 
                     for tag in game_tags:
                         error_count = 0
+                        if limit > 0 and rec_count >= limit:
+                            raise LimitReachedException
                         try:
                             # get different attributes
                             # traverse up the DOM tree
                             data = tag.parent.parent.find_all("td")
 
+                            game_name = " ".join(tag.string.split())
+
+                            myprogressbar.set_description_str(f"{game_name[:15]:<15}")
+
                             release_date = data[14].string.split()
                             release_year = release_date[-1]
                             
                             result = [
-                                " ".join(tag.string.split()),
+                                game_name,
                                 np.int32(data[0].string),
                                 data[3].find('img').attrs['alt'].strip(),
                                 data[4].string.strip(),
@@ -103,14 +112,18 @@ def main():
                             rec_count += 1
                             myprogressbar.update(1)
                         except Exception as exc:
-                            if error_count < 10:
+                            if error_count <= max_retries:
                                 continue
                             raise exc
                     page += 1
+                except LimitReachedException:
+                    myprogressbar.close()
+                    print("Limit reached.")
+                    break
                 except KeyboardInterrupt:
                     break
                 except Exception as exc:
-                    if error_count < 10:
+                    if error_count <= max_retries:
                         continue
                     raise exc
     except Exception as exc:
@@ -123,6 +136,7 @@ def main():
             'Release_Date', 'Genre'])
         print(df)
         df.to_csv(os.path.join(csv_path, "vgsales.csv"), sep=",", encoding='utf-8', index=False)
+        print("Saved data to file")
 
 
 if __name__ == "__main__":

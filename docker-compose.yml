@@ -6,3 +6,5 @@ services:
       dockerfile: Dockerfile
     volumes:
       - ./csv:/csv
+    environment:
+      LIMIT: 0    # Limit for scraped Games. 0 := not limit = all
