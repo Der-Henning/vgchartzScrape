@@ -18,12 +18,12 @@ def main():
     urltail += '&results=100&order=Sales&showtotalsales=0&showtotalsales=1&showpublisher=0'
     urltail += '&showpublisher=1&showvgchartzscore=0&shownasales=1&showdeveloper=1&showcriticscore=1'
     urltail += '&showpalsales=0&showpalsales=1&showreleasedate=1&showuserscore=1&showjapansales=1'
-    urltail += '&showlastupdate=0&showothersales=1&showgenre=1&showshipped=0&showshipped=1&sort=GL'
+    urltail += '&showlastupdate=0&showlastupdate=1&showothersales=1&showgenre=1&showshipped=0&showshipped=1&sort=GL'
 
     csv_path = os.environ.get("CSV_PATH", os.getcwd())
     limit = int(os.environ.get("LIMIT", 0))
 
-    max_retries = 20
+    max_retries = 100
 
     results = []
     rec_count = 0
@@ -74,6 +74,9 @@ def main():
                             release_date = data[14].string.split()
                             release_year = release_date[-1]
                             
+                            last_update = data[15].string.split()
+                            update_year = last_update[-1]
+                            
                             result = [
                                 game_name,
                                 np.int32(data[0].string),
@@ -84,14 +87,22 @@ def main():
                                 *[float(data[idx].string[:-1].strip()) if not data[idx].string.startswith("N/A") else np.nan for idx in range(8, 14)]
                             ]
                             if release_year.startswith('N/A'):
-                                result.append('N/A')
+                                result.append(np.nan)
                             else:
-                                if int(release_year) >= 80:
+                                if int(release_year) >= 60:
                                     release_date[-1] = "19" + release_year
                                 else:
                                     release_date[-1] = "20" + release_year
-                                result.append(f"{' '.join(release_date)}")
-
+                                result.append(pd.to_datetime(f"{' '.join(release_date)}"))
+                            
+                            if update_year.startswith('N/A'):
+                                result.append(np.nan)
+                            else:
+                                if int(update_year) >= 60:
+                                    last_update[-1] = "19" + release_year
+                                else:
+                                    last_update[-1] = "20" + release_year
+                                result.append(pd.to_datetime(f"{' '.join(last_update)}"))
 
                             # go to every individual website to get genre info
                             url_to_game = tag['href']
@@ -133,7 +144,7 @@ def main():
             'Name', 'Rank', 'Platform', 'Publisher', 'Developer',
             'Critic_Score', 'User_Score', 'Total_Shipped', 'Total_Sales',
             'NA_Sales', 'PAL_Sales', 'JP_Sales', 'Other_Sales',
-            'Release_Date', 'Genre'])
+            'Release_Date', 'Last_Update', 'Genre'])
         print(df)
         df.to_csv(os.path.join(csv_path, "vgsales.csv"), sep=",", encoding='utf-8', index=False)
         print("Saved data to file")
